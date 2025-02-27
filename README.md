@@ -37,6 +37,11 @@ KEYCHAIN_PASSWORD="your_password"
 BUNDLE_ID="com.example.app"
 ```
 目前規劃的是一個專案對應一個.env檔案，所以ROOT_DIR可以設置不同資料夾
+理論上只有
+1.ROOT_DIR
+2.BUNDLE_ID
+3.KEYCHAIN_PATH (如果不想要所有憑證都塞在同一個鑰匙圈可以改)
+需要注意一下，還有ipa位置配置看下面第四點
 
 ### 4️⃣ 配置ipa位置
 
