@@ -3,6 +3,7 @@ import os
 from . import auth
 import re
 import requests
+import hashlib
 from . import apple_accounts
 from apple_cert_manager.config import config 
 from . import keychain
@@ -162,6 +163,24 @@ def get_cert_name_from_file(cert_file_path):
     if cert_name:
         cert_name = re.sub(r"\s*\(.*?\)$", "", cert_name)
     return cert_name
+
+def get_cer_sha1(cert_id):
+    """計算 `.cer` 檔案的 SHA-1 哈希值"""
+    cert_file_path = os.path.join(config.cert_dir_path, f"{cert_id}.cer")
+    if not os.path.exists(cert_file_path):
+        print(f"❌ 檔案不存在: {cert_file_path}")
+        return None
+    sha1 = hashlib.sha1()
+    try:
+        with open(cert_file_path, "rb") as f:
+            while chunk := f.read(4096):  # 讀取 4KB 區塊
+                sha1.update(chunk)
+
+        return sha1.hexdigest().upper()  # 轉大寫與 Apple 格式一致
+
+    except Exception as e:
+        print(f"❌ 無法計算 SHA-1: {e}")
+        return None
 
 def remove_keychain_certificate(cert):
     """ 從 macOS Keychain 刪除指定的憑證與私鑰，如果有apple portal 的cert資料用這個 """

@@ -38,6 +38,14 @@ BUNDLE_ID="com.example.app"
 ```
 目前規劃的是一個專案對應一個.env檔案，所以ROOT_DIR可以設置不同資料夾
 
+### 4️⃣ 配置ipa位置
+
+在ROOT_DIR建立一個名稱為ipa資料夾並且把要簽名的ipa命名為app.ipa
+```ini
+IPA_PATH="${ROOT_DIR}/ipa/app.ipa"
+```
+需與.env檔這個參數符合
+
 ## 🔧 使用方式
 
 所有指令透過 `cli.py` 操作，並且**強制指定** `.env` 檔案，確保環境變數正確載入。

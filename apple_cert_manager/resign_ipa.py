@@ -6,6 +6,7 @@ import concurrent.futures
 from apple_cert_manager.config import config 
 from . import apple_accounts
 from . import keychain
+from . import certificate
 
 def run_subprocess(command, description, check=True, **kwargs):
     """通用的子程序運行工具"""
@@ -107,7 +108,7 @@ def sign_app(app_dir, signing_identity, entitlements_path):
             [
                 "codesign",
                 "--force",
-                "--sign", "Apple Distribution: YEN TUAN YANG (789WXJYLJM)",
+                "--sign", signing_identity,
                 "--entitlements", entitlements_path,
                 "--keychain", keychain_path,
                 "--deep",
@@ -162,8 +163,8 @@ def resign_ipa(apple_id):
         return False
     keychain.unlock_keychain()
     keychain.install_apple_wwdr_certificate()
-    ipa_path = config.ipa_path
     cert_id = account['cert_id']
+    signing_identity = certificate.get_cer_sha1(cert_id)
     profile_path = os.path.join(config.profile_dir_path, f"adhoc_{cert_id}.mobileprovision")
     entitlements_path = None
     unzip_dir = None
@@ -196,7 +197,7 @@ def resign_ipa(apple_id):
         replace_provisioning_profile(unzip_dir, profile_path)
         # 移除舊簽名並重新簽名
         remove_code_signature(app_dir)
-        sign_app(app_dir, cert_id, entitlements_path)
+        sign_app(app_dir, signing_identity, entitlements_path)
         # 重新打包 IPA
         resigned_ipa_path = repackage_ipa(unzip_dir)
         print(f"重簽名流程完成！ 位置: {resigned_ipa_path}")
