@@ -1,16 +1,15 @@
 import sqlite3
 import os
-import env_config
 import json
 import sys
-import match
-import local_file
-import certificate
-import database
+import concurrent.futures
+from . import match
+from . import local_file
+from . import certificate
+from . import database
+from apple_cert_manager.config import config
 from datetime import datetime
 from functools import wraps
-
-DB_PATH = env_config.db_path
 
 # ✅ 確保資料庫只初始化一次
 DATABASE_INITIALIZED = False
@@ -21,7 +20,7 @@ def initialize_database():
     if DATABASE_INITIALIZED:
         return  # ✅ 已初始化，直接返回
 
-    if not os.path.exists(DB_PATH):
+    if not os.path.exists(config.db_path):
         database.initialize_database()
     
     DATABASE_INITIALIZED = True  # ✅ 設定為已初始化
@@ -37,7 +36,7 @@ def ensure_database_initialized(func):
 @ensure_database_initialized
 def get_accounts():
     """ 取得所有 Apple 開發者帳號與憑證資訊 """
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(config.db_path)
     conn.row_factory = sqlite3.Row  # ✅ 讓 cursor.fetchall() 回傳 dict-like 物件
     cursor = conn.cursor()
 
@@ -50,7 +49,7 @@ def get_accounts():
 @ensure_database_initialized
 def get_account_by_apple_id(apple_id):
     """ 透過 Apple ID 取得帳號資訊 """
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(config.db_path)
     conn.row_factory = sqlite3.Row  # ✅ 讓回傳結果支援 dict-like 存取
     cursor = conn.cursor()
 
@@ -69,7 +68,7 @@ def get_account_by_apple_id(apple_id):
 def insert_account(apple_id, issuer_id, key_id):
     """ 🚀 插入 Apple 開發者帳號，如果已存在則跳過 """
     try:
-        conn = sqlite3.connect(DB_PATH)
+        conn = sqlite3.connect(config.db_path)
         cursor = conn.cursor()
 
         # 🔍 檢查 `apple_id` 是否已存在
@@ -98,7 +97,7 @@ def insert_account(apple_id, issuer_id, key_id):
 @ensure_database_initialized
 def update_cert_id(apple_id, cert_id):
     """ 只更新 `cert_id`，並同步更新 `created_at` """
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(config.db_path)
     cursor = conn.cursor()
 
     # ✅ 先確認 `apple_id` 是否存在
@@ -125,7 +124,7 @@ def update_cert_id(apple_id, cert_id):
 @ensure_database_initialized
 def clear_cert_id(apple_id):
     """ 將 `cert_id` 設為 NULL，並刪除相關的 `.cer` 和 `.mobileprovision` 檔案 """
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(config.db_path)
     cursor = conn.cursor()
     # ✅ 先獲取 `cert_id`
     cursor.execute("SELECT cert_id FROM accounts WHERE apple_id = ?", (apple_id,))
@@ -151,10 +150,10 @@ def clear_cert_id(apple_id):
     return True
         
 
-@ensure_database_initialized
 def insert_from_json(json_path=None):
-    """ 從 JSON 批量插入 Apple 帳號（但不覆蓋現有帳號） """
-    json_path = json_path or env_config.json_path  # ✅ 預設 JSON 檔案
+    """ 🚀 從 JSON 批量插入 Apple 帳號（不覆蓋現有帳號），插入後並行執行 match.match_apple_account """
+
+    json_path = json_path or config.JSON_PATH  # ✅ 預設 JSON 檔案
     if not os.path.exists(json_path):
         print(f"❌ 找不到 JSON 檔案: {json_path}")
         return
@@ -162,41 +161,25 @@ def insert_from_json(json_path=None):
     with open(json_path, "r", encoding="utf-8") as file:
         try:
             accounts = json.load(file)
+            if not isinstance(accounts, list):
+                print("❌ JSON 格式錯誤，應該是陣列")
+                return
 
-            conn = sqlite3.connect(DB_PATH)
-            cursor = conn.cursor()
-
-            for account in accounts:
-                apple_id = account.get("apple_id")
-                issuer_id = account.get("issuer_id")
-                key_id = account.get("key_id")
-                cert_id = account.get("cert_id", None)
-
-                # ✅ 先檢查 `apple_id` 是否已存在，因為怕忘記刪除舊有的json資料會把資料複寫掉
-                cursor.execute("SELECT COUNT(*) FROM accounts WHERE apple_id = ?", (apple_id,))
-                count = cursor.fetchone()[0]
-
-                if count > 0:
-                    print(f"⚠️ Apple ID {apple_id} 已存在，跳過導入")
-                else:
-                    # ✅ 只插入新 Apple ID，不覆蓋舊的
-                    cursor.execute("""
-                    INSERT INTO accounts (apple_id, issuer_id, key_id, cert_id, created_at)
-                    VALUES (?, ?, ?, ?, ?)
-                    """, (apple_id, issuer_id, key_id, cert_id, datetime.now() if cert_id else None))
-
-                    print(f"✅ 新增 Apple ID: {apple_id}")
-
-            conn.commit()
-            conn.close()
-
+            # 🚀 使用 ThreadPoolExecutor 來並行插入帳號
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                list(executor.map(lambda acc: insert_account(
+                    acc.get("apple_id"),
+                    acc.get("issuer_id"),
+                    acc.get("key_id")
+                ), accounts))
         except json.JSONDecodeError:
-            print("❌ JSON 格式錯誤")
+            print("❌ JSON 解析錯誤")
+
 
 @ensure_database_initialized
 def delete_account(apple_id):
     """ 刪除指定 Apple ID，並刪除相關的 `.cer` 和 `.mobileprovision` 檔案 """
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(config.db_path)
     cursor = conn.cursor()
 
     # ✅ 先獲取 `cert_id`
@@ -227,7 +210,7 @@ def delete_account(apple_id):
 @ensure_database_initialized
 def query_accounts():
     """ 查詢所有 Apple 帳號 """
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(config.db_path)
     cursor = conn.cursor()
     cursor.execute("SELECT apple_id, issuer_id, key_id, cert_id, created_at FROM accounts")
     accounts = cursor.fetchall()
@@ -238,34 +221,5 @@ def query_accounts():
     else:
         for account in accounts:
             print(f"📜 Apple ID: {account[0]}, Issuer ID: {account[1]}, Key ID: {account[2]}, Cert ID: {account[3] or '❌ 無憑證'}, Created At: {account[4] or 'N/A'}")
-        
-# 🚀 CLI 入口
-if __name__ == "__main__":
-    if len(sys.argv) < 2:
-        print("❌ 錯誤：請提供指令，例如：")
-        print("  python3 apple_accounts.py insert <apple_id> <issuer_id> <key_id>")
-        print("  python3 apple_accounts.py delete <apple_id>")
-        print("  python3 apple_accounts.py query")
-        print("  python3 apple_accounts.py import accounts.json")
-        sys.exit(1)
-
-    command = sys.argv[1].lower()
-
-    if command == "insert" and len(sys.argv) == 5:
-        insert_account(sys.argv[2], sys.argv[3], sys.argv[4])
-    elif command == "delete" and len(sys.argv) == 3:
-        delete_account(sys.argv[2])
-    elif command == "query":
-        query_accounts()
-    elif command == "import":
-        json_path = sys.argv[2] if len(sys.argv) > 2 else None
-        insert_from_json(json_path)
-    else:
-        print("❌ 無效的指令，請參考以下用法：")
-        print("  python3 apple_accounts.py insert <apple_id> <issuer_id> <key_id>")
-        print("  python3 apple_accounts.py delete <apple_id>")
-        print("  python3 apple_accounts.py query")
-        print("  python3 apple_accounts.py import [json_path]")
-        sys.exit(1)
 
 

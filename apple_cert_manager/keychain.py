@@ -1,5 +1,5 @@
 import subprocess
-import env_config
+from apple_cert_manager.config import config 
 import os
 import tempfile
 import requests
@@ -9,8 +9,8 @@ APPLE_WWDR_CA_URL = "https://www.apple.com/certificateauthority/AppleWWDRCAG3.ce
 
 def unlock_keychain():
     """🚀 使用 Fastlane 解鎖 macOS Keychain"""
-    keychain_path = os.path.expanduser(env_config.keychain_path)
-    keychain_password = env_config.keychain_password
+    keychain_path = os.path.expanduser(config.keychain_path)
+    keychain_password = config.keychain_password
     run_subprocess([
         "fastlane", "run", "unlock_keychain",
         f"path:{keychain_path}",
@@ -20,7 +20,7 @@ def unlock_keychain():
 def configure_keychain_search():
     """設定自訂 Keychain 為預設搜索範圍"""
     try:
-        keychain_path = os.path.expanduser(env_config.keychain_path)
+        keychain_path = os.path.expanduser(config.keychain_path)
         run_subprocess(
             ["security", "list-keychains", "-s", keychain_path],
             "設置 Keychain 搜索範圍"
@@ -33,8 +33,8 @@ def configure_keychain_search():
 def set_key_partition_list():
     """設定 Keychain 分區列表權限"""
     try:
-        keychain_path = os.path.expanduser(env_config.keychain_path)
-        keychain_password = env_config.keychain_password
+        keychain_path = os.path.expanduser(config.keychain_path)
+        keychain_password = config.keychain_password
         run_subprocess(
             ["security", "set-key-partition-list", "-S", "apple-tool:,apple:", "-k", keychain_password, keychain_path],
             "設置 Keychain 分區列表權限"
@@ -58,7 +58,7 @@ def restore_default_keychain(original_keychains):
 def debug_keychain_identities():
     """列出 Keychain 中的簽名身份"""
     try:
-        keychain_path = os.path.expanduser(env_config.keychain_path)
+        keychain_path = os.path.expanduser(config.keychain_path)
         result = run_subprocess(
             ["security", "find-identity", "-p", "codesigning", keychain_path],
             "列出 Keychain 簽名身份",
@@ -79,7 +79,7 @@ def is_apple_wwdr_installed(keychain_path):
 def install_apple_wwdr_certificate():
     """🚀 免 `sudo` 安裝 `Apple WWDR CA` 到指定 Keychain"""
     # 1️⃣ 取得 Keychain 路徑
-    keychain_path = os.path.expanduser(env_config.keychain_path)
+    keychain_path = os.path.expanduser(config.keychain_path)
     # 2️⃣ 檢查是否已安裝
     if is_apple_wwdr_installed(keychain_path):
         print(f"✅ `Apple WWDR CA` 憑證已安裝於 {keychain_path}，無需重新安裝")

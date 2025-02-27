@@ -1,10 +1,7 @@
-import os
 import subprocess
-import tempfile
-import apple_accounts
-import env_config
-import auth
-import sys
+from . import apple_accounts
+from apple_cert_manager.config import config 
+from . import auth
 
 def get_provisioning_profile(apple_id):
     """ 執行 Fastlane get_provisioning_profile """
@@ -27,8 +24,8 @@ def get_provisioning_profile(apple_id):
     provisioning_name = f"adhoc_{cert_id}"  # ✅ `adhoc_<cert_id>`
     filename = f"adhoc_{cert_id}.mobileprovision"  # ✅ `adhoc_<cert_id>.mobileprovision`
     
-    app_identifier = env_config.bundle_id
-    output_path = env_config.profile_dir_path
+    app_identifier = config.bundle_id
+    output_path = config.profile_dir_path
 
     try:
         # 🚀 準備 Fastlane 指令
@@ -87,7 +84,3 @@ def register_device(apple_id, device_name, udid):
         print(f"❌ 註冊設備失敗: {result.stderr}")
         return False
 
-# 🚀 測試執行
-if __name__ == "__main__":
-    udid = sys.argv[1]
-    register_device("leomessi3345678@outlook.com", "Test iphone", udid)

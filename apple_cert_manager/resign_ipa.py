@@ -2,9 +2,10 @@ import subprocess
 import os
 import shutil
 import plistlib
-import env_config
-import apple_accounts
-import keychain
+import concurrent.futures
+from apple_cert_manager.config import config 
+from . import apple_accounts
+from . import keychain
 
 def run_subprocess(command, description, check=True, **kwargs):
     """通用的子程序運行工具"""
@@ -18,7 +19,7 @@ def run_subprocess(command, description, check=True, **kwargs):
 
 def extract_ipa(apple_id):
     """ 🚀 根據 `apple_id` 建立專屬目錄，複製 IPA，並解壓 """
-    ipa_source_path = env_config.ipa_path  # 原始 IPA 位置
+    ipa_source_path = config.ipa_path  # 原始 IPA 位置
     ipa_base_dir = os.path.dirname(ipa_source_path)
     # 1️⃣ 🔍 取得 `apple_id` 的前半部分作為目錄名稱
     apple_id_prefix = apple_id.split("@")[0]
@@ -100,7 +101,7 @@ def remove_code_signature(app_dir):
 def sign_app(app_dir, signing_identity, entitlements_path):
     """簽名應用"""
     print(f"開始簽名應用：{app_dir}")
-    keychain_path = os.path.expanduser(env_config.keychain_path)
+    keychain_path = os.path.expanduser(config.keychain_path)
     try:
         run_subprocess(
             [
@@ -161,9 +162,9 @@ def resign_ipa(apple_id):
         return False
     keychain.unlock_keychain()
     keychain.install_apple_wwdr_certificate()
-    ipa_path = env_config.ipa_path
+    ipa_path = config.ipa_path
     cert_id = account['cert_id']
-    profile_path = os.path.join(env_config.profile_dir_path, f"adhoc_{cert_id}.mobileprovision")
+    profile_path = os.path.join(config.profile_dir_path, f"adhoc_{cert_id}.mobileprovision")
     entitlements_path = None
     unzip_dir = None
     app_dir = None
@@ -207,5 +208,29 @@ def resign_ipa(apple_id):
         keychain.restore_default_keychain(original_keychains)
         clean_up(unzip_dir)
         
-if __name__ == "__main__":
-    resign_ipa("leomessi3345678@outlook.com")
+def resign_single_account(account):
+    """🔄 針對單一 Apple ID 執行 IPA 重簽名"""
+    apple_id = account["apple_id"]
+    try:
+        print(f"🚀 開始重簽名 Apple ID: {apple_id}")
+        result = resign_ipa(apple_id)
+        if result:
+            print(f"✅ Apple ID {apple_id} 簽名成功：{result}")
+        else:
+            print(f"❌ Apple ID {apple_id} 簽名失敗")
+    except Exception as e:
+        print(f"❌ Apple ID {apple_id} 簽名時發生錯誤：{e}")
+        
+def batch_resign_all_accounts(max_workers=10):
+    """🚀 讀取所有 Apple 帳號，並行執行重簽名"""
+    accounts = apple_accounts.get_accounts()  # ✅ 從資料庫讀取所有帳戶
+    if not accounts:
+        print("⚠️ 沒有找到可用的 Apple 帳號")
+        return
+
+    print(f"🚀 開始批量重簽名，最大並行數: {max_workers}")
+    
+    # ✅ 使用 ThreadPoolExecutor 進行並行簽名
+    with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+        executor.map(resign_single_account, accounts)
+        

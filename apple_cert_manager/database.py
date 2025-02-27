@@ -1,10 +1,10 @@
 import sqlite3
-import env_config
+from apple_cert_manager.config import config 
 import os
 
 def initialize_database():
     """ 初始化 SQLite 資料庫，建立 accounts 表格，包含 cert_id """
-    db_path = env_config.db_path
+    db_path = config.db_path
     os.makedirs(os.path.dirname(db_path), exist_ok=True)  # ✅ 確保資料夾存在
 
     conn = sqlite3.connect(db_path)

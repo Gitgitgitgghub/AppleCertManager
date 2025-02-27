@@ -1,8 +1,8 @@
 import jwt
 import os
 import json
-import env_config
-import apple_accounts
+from apple_cert_manager.config import config 
+from . import apple_accounts
 from datetime import datetime, timedelta
 
 
@@ -14,7 +14,7 @@ def generate_token(apple_id):
         return None
     key_id = account['key_id']
     issuer_id = account['issuer_id']
-    api_key_dir = env_config.api_key_dir_path  # 取得目錄
+    api_key_dir = config.api_key_dir_path  # 取得目錄
     private_key_path = os.path.join(api_key_dir, f"AuthKey_{key_id}.p8")  # 拼接完整路徑
 
     if not os.path.exists(private_key_path):
@@ -50,7 +50,7 @@ def generate_fastlane_api_key_json(apple_id):
     issuer_id = account['issuer_id']
 
     # 取得 API Key JSON 存放路徑
-    api_key_json_dir = os.path.expanduser(env_config.api_key_json_dir_path)
+    api_key_json_dir = os.path.expanduser(config.api_key_json_dir_path)
     os.makedirs(api_key_json_dir, exist_ok=True)  # ✅ 確保目錄存在
 
     json_file_path = os.path.join(api_key_json_dir, f"{key_id}.json")
@@ -60,7 +60,7 @@ def generate_fastlane_api_key_json(apple_id):
         return json_file_path
 
     # 確保 .p8 檔案存在
-    p8_file_path = os.path.join(env_config.api_key_dir_path, f"AuthKey_{key_id}.p8")
+    p8_file_path = os.path.join(config.api_key_dir_path, f"AuthKey_{key_id}.p8")
     if not os.path.exists(p8_file_path):
         print(f"❌ 找不到 .p8 檔案: {p8_file_path}")
         return None

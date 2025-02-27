@@ -1,7 +1,7 @@
-import apple_accounts
-import certificate
-import profile
-import local_file
+from . import apple_accounts
+from . import certificate
+from . import profile
+from . import local_file
 
 
 

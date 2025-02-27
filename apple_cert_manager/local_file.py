@@ -1,5 +1,5 @@
 import os
-import env_config
+from apple_cert_manager.config import config 
 
 def remove_local_files(cert_id):
     """ 刪除與 `cert_id` 相關的 `.cer` 和 `.mobileprovision` 檔案 """
@@ -8,8 +8,8 @@ def remove_local_files(cert_id):
         return False
 
     # ✅ 設定檔案路徑
-    cert_dir_path = os.path.expanduser(env_config.cert_dir_path)  # `.cer` 檔案路徑
-    profile_dir_path = os.path.expanduser(env_config.profile_dir_path)  # `.mobileprovision` 檔案路徑
+    cert_dir_path = os.path.expanduser(config.cert_dir_path)  # `.cer` 檔案路徑
+    profile_dir_path = os.path.expanduser(config.profile_dir_path)  # `.mobileprovision` 檔案路徑
     p12_file = os.path.join(cert_dir_path, f"{cert_id}.p12")
     cer_file = os.path.join(cert_dir_path, f"{cert_id}.cer")
     csr_file = os.path.join(cert_dir_path, f"{cert_id}.certSigningRequest")
@@ -46,7 +46,7 @@ def remove_local_files(cert_id):
     return True
 
 def remove_api_key_json(key_id):
-    api_key_json_dir_path = os.path.expanduser(env_config.api_key_json_dir_path)
+    api_key_json_dir_path = os.path.expanduser(config.api_key_json_dir_path)
     api_key_json_file = os.path.join(api_key_json_dir_path, f"{key_id}.json")
     # ✅ 刪除 `api_key_json` 文件
     if os.path.exists(api_key_json_file):

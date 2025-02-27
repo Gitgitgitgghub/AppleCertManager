@@ -1,21 +1,18 @@
 import subprocess
 import os
-import tempfile
-import auth
+from . import auth
 import re
 import requests
-import base64
-import hashlib
-import apple_accounts
-import env_config
-import keychain
+from . import apple_accounts
+from apple_cert_manager.config import config 
+from . import keychain
 from datetime import datetime
 
 def create_distribution_certificate(apple_id):
     """ 用 Fastlane `cert` 來建立新的 iOS Distribution 憑證 """
-    keychain_path = env_config.keychain_path
-    keychain_password = env_config.keychain_password
-    cert_output_path = env_config.cert_dir_path
+    keychain_path = config.keychain_path
+    keychain_password = config.keychain_password
+    cert_output_path = config.cert_dir_path
     # **🚀 產生 Fastlane API Key JSON**
     api_key_json_path = auth.generate_fastlane_api_key_json(apple_id)
     if not api_key_json_path:
@@ -138,7 +135,7 @@ def filter_distribution_certificates(certificates):
 
 def find_private_key(cert_name):
     """ 搜尋私鑰 """
-    keychain_path = os.path.expanduser(env_config.keychain_path)
+    keychain_path = os.path.expanduser(config.keychain_path)
     search_command = ["security", "find-identity", "-v", "-p", "codesigning", keychain_path]
     result = subprocess.run(search_command, capture_output=True, text=True)
     
@@ -170,7 +167,7 @@ def remove_keychain_certificate(cert):
     """ 從 macOS Keychain 刪除指定的憑證與私鑰，如果有apple portal 的cert資料用這個 """
     keychain.unlock_keychain()
     cert_name = cert['attributes']['name']
-    keychain_path = os.path.expanduser(env_config.keychain_path)
+    keychain_path = os.path.expanduser(config.keychain_path)
     print(f"🔍 正在刪除 {cert_name}")
     key_hash = find_private_key(cert_name)
     if key_hash:
@@ -186,8 +183,8 @@ def remove_keychain_certificate(cert):
 def remove_keychain_certificate_by_id(cert_id):
     """ 🚀 透過 `cert_id` 刪除 macOS Keychain 中的憑證與私鑰 """
     keychain.unlock_keychain()
-    keychain_path = keychain_path = os.path.expanduser(env_config.keychain_path)
-    cert_file_path = os.path.join(env_config.cert_dir_path, f"{cert_id}.cer")
+    keychain_path = keychain_path = os.path.expanduser(config.keychain_path)
+    cert_file_path = os.path.join(config.cert_dir_path, f"{cert_id}.cer")
     # 解析 `.cert` 取得憑證名稱
     cert_name = get_cert_name_from_file(cert_file_path)
     if not cert_name:
