@@ -23,6 +23,6 @@ def match_apple_account(apple_id):
     if cert_id:
         apple_accounts.update_cert_id(apple_id, cert_id)
         profile.get_provisioning_profile(apple_id)
-        print(f"✅ 已建立帳號: {apple_id} 新的憑證與profile檔案")
+        print(f"✅✅✅ 已建立帳號: {apple_id} 新的憑證與profile檔案✅✅✅")
     else:
         print(f"❌憑證建立失敗")

@@ -14,6 +14,7 @@ def create_distribution_certificate(apple_id):
     keychain_path = config.keychain_path
     keychain_password = config.keychain_password
     cert_output_path = config.cert_dir_path
+    keychain.unlock_keychain()
     # **🚀 產生 Fastlane API Key JSON**
     api_key_json_path = auth.generate_fastlane_api_key_json(apple_id)
     if not api_key_json_path:

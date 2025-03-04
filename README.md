@@ -33,9 +33,10 @@ PROFILE_DIR_PATH="${ROOT_DIR}/profiles"
 IPA_PATH="${ROOT_DIR}/ipa/app.ipa"
 JSON_PATH="${ROOT_DIR}/accounts.json"
 KEYCHAIN_PATH="~/Library/Keychains/Certs.keychain-db"
-KEYCHAIN_PASSWORD="your_password"
+KEYCHAIN_PASSWORD="your_password"  #❌鑰匙圈密碼最好純數字，不知道為啥非純數字會導致解鎖失敗導致一直詢問你密碼
 BUNDLE_ID="com.example.app"
 ```
+❌❌❌❌鑰匙圈密碼最好純數字，不知道為啥非純數字會導致解鎖失敗導致一直詢問你密碼
 目前規劃的是一個專案對應一個.env檔案，所以ROOT_DIR可以設置不同資料夾
 理論上只有
 

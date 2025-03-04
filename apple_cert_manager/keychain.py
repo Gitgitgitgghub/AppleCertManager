@@ -8,14 +8,52 @@ import requests
 APPLE_WWDR_CA_URL = "https://www.apple.com/certificateauthority/AppleWWDRCAG3.cer"
 
 def unlock_keychain():
-    """🚀 使用 Fastlane 解鎖 macOS Keychain"""
+    """🚀 確保 Keychain 存在，然後解鎖"""
     keychain_path = os.path.expanduser(config.keychain_path)
     keychain_password = config.keychain_password
-    run_subprocess([
-        "fastlane", "run", "unlock_keychain",
-        f"path:{keychain_path}",
-        f"password:{keychain_password}"
-    ], "解鎖 Keychain")
+
+    try:
+        # **🔍 檢查 Keychain 是否存在**
+        if not os.path.exists(keychain_path):
+            print(f"⚠️ 找不到 Keychain: {keychain_path}，正在建立...")
+            create_keychain(keychain_path, keychain_password)
+
+        # **🔓 執行 `security unlock-keychain` 解鎖**
+        run_subprocess([
+            "security", "unlock-keychain", "-p", keychain_password, keychain_path
+        ], "解鎖 Keychain")
+
+        print(f"✅ 成功解鎖 Keychain: {keychain_path}")
+
+    except subprocess.CalledProcessError as e:
+        print(f"❌ 解鎖 Keychain 失敗: {e}")
+        
+def create_keychain(keychain_path, keychain_password):
+    """🛠 創建新的 Keychain 並設定為預設"""
+    try:
+        run_subprocess([
+            "security", "create-keychain", "-p", keychain_password, keychain_path
+        ], "建立新的 Keychain")
+        # 🔍 取得當前系統的 Keychain 列表
+        result = subprocess.run(
+            ["security", "list-keychains"],
+            stdout=subprocess.PIPE, text=True, check=True
+        )
+        existing_keychains = [
+            keychain.strip().strip('"') for keychain in result.stdout.splitlines()
+        ]
+        # 如果 keychain 已經在列表中，則無需添加
+        if keychain_path in existing_keychains:
+            print(f"✅ `{keychain_path}` 已經在 Keychain 搜尋列表內")
+            return
+        # 🚀 保留原始 keychains，並新增我們的 keychain（避免覆蓋）
+        new_keychains = existing_keychains + [keychain_path]
+        # 設定新的 Keychain 列表（確保不覆蓋）
+        run_subprocess(["security", "list-keychains", "-s"] + new_keychains, "更新 Keychain 搜尋列表")
+        print(f"✅ 已成功建立並設置 Keychain: {keychain_path}")
+
+    except subprocess.CalledProcessError as e:
+        print(f"❌ 建立 Keychain 失敗: {e}")
         
 def configure_keychain_search():
     """設定自訂 Keychain 為預設搜索範圍"""
