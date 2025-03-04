@@ -24,19 +24,41 @@ pip install -r requirements.txt
 請根據需求建立**不同環境的** `.env` 檔案，例如：
 
 ```ini
-ROOT_DIR="/Users/brant/Desktop/test1"
+# 📌📌📌 專案根目錄（統一管理所有路徑）📌📌📌
+ROOT_DIR="${HOME}/Desktop/test1"
+
+# 📌📌📌 BUNDLE_ID 📌📌📌
+BUNDLE_ID="com.example"
+
+# 📌 macOS Keychain 設定
+KEYCHAIN_PATH="${HOME}/Library/Keychains/Certs.keychain-db"
+
+# 📌 macOS Keychain 鑰匙圈密碼 ❌最好純數字，不知道為啥非純數字會導致解鎖失敗導致一直詢問你密碼
+KEYCHAIN_PASSWORD="password" 
+
+
+#-----------------------------------------------#
+
+# 📌 Apple portal 申請來的.p8位置
 API_KEY_DIR_PATH="${ROOT_DIR}/api_key"
+
+# 📌 與apple api 溝通的json 存放位置
 API_KEY_JSON_DIR_PATH="${ROOT_DIR}/api_key_json"
+
+# 📌 資料庫
 DB_PATH="${ROOT_DIR}/apple_account.sqlite"
+
+# 📌 憑證 & Provisioning Profile
 CERT_DIR_PATH="${ROOT_DIR}/certs"
 PROFILE_DIR_PATH="${ROOT_DIR}/profiles"
+
+# 📌 IPA 相關路徑
 IPA_PATH="${ROOT_DIR}/ipa/app.ipa"
+
+# 📌 批次匯入檔案的json位置
 JSON_PATH="${ROOT_DIR}/accounts.json"
-KEYCHAIN_PATH="~/Library/Keychains/Certs.keychain-db"
-KEYCHAIN_PASSWORD="your_password"  #❌鑰匙圈密碼最好純數字，不知道為啥非純數字會導致解鎖失敗導致一直詢問你密碼
-BUNDLE_ID="com.example.app"
 ```
-❌❌❌❌鑰匙圈密碼最好純數字，不知道為啥非純數字會導致解鎖失敗導致一直詢問你密碼
+❌鑰匙圈密碼最好純數字，不知道為啥非純數字會導致解鎖失敗導致一直詢問你密碼
 目前規劃的是一個專案對應一個.env檔案，所以ROOT_DIR可以設置不同資料夾
 理論上只有
 
