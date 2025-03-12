@@ -192,19 +192,17 @@ def delete_account(apple_id):
         return False
 
     cert_id = row[0]  # 取得 `cert_id`
-    key_id = row[1]
+    # ✅ 如果 `cert_id` 存在，則刪除本地憑證檔案
+    if cert_id:
+        certificate.remove_keychain_certificate_by_id(cert_id)
+        local_file.remove_local_files(apple_id)
     # ✅ 刪除帳號
     cursor.execute("DELETE FROM accounts WHERE apple_id = ?", (apple_id,))
     conn.commit()
     conn.close()
     print(f"✅ 已刪除 Apple ID: {apple_id}")
 
-    # ✅ 如果 `cert_id` 存在，則刪除本地憑證檔案
-    if cert_id:
-        certificate.remove_keychain_certificate_by_id(cert_id)
-        local_file.remove_local_files(cert_id)
-    if key_id:
-        local_file.remove_api_key_json(key_id)
+    
     return True
     
 @ensure_database_initialized

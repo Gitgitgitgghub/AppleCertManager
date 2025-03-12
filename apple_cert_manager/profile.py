@@ -146,8 +146,6 @@ def get_provisioning_profile(apple_id):
     profile_id = find_existing_profile(token, filename)
     if profile_id:
         delete_existing_profile(token, profile_id)
-    else:
-        return False
     # 創建新的描述檔案並且套用所有裝置
     profile_content = create_new_profile(token, cert_id, filename, bundle_id_api, device_ids)
     # 描述檔創建成功會回傳一個base64 存起來

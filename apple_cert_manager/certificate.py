@@ -4,57 +4,12 @@ from . import auth
 import re
 import requests
 import hashlib
+import base64
 from . import apple_accounts
+from . import local_file
 from apple_cert_manager.config import config 
 from . import keychain
 from datetime import datetime
-
-def create_distribution_certificate(apple_id):
-    """ 用 Fastlane `cert` 來建立新的 iOS Distribution 憑證 """
-    keychain_path = config.keychain_path
-    keychain_password = config.keychain_password
-    cert_output_path = config.cert_dir_path
-    keychain.unlock_keychain()
-    # **🚀 產生 Fastlane API Key JSON**
-    api_key_json_path = auth.generate_fastlane_api_key_json(apple_id)
-    if not api_key_json_path:
-        print("❌ 產生 API Key JSON 失敗，無法繼續建立憑證")
-        return False
-    try:
-        # **🚀 呼叫 Fastlane `cert` 來建立 Distribution 憑證**
-        result = subprocess.run(
-            [
-                "fastlane", "run", "cert",
-                "development", "false",  # 建立 Distribution 憑證
-                f"api_key_path:{api_key_json_path}",  # ✅ 傳入 Fastlane API Key JSON
-                f"output_path:{cert_output_path}",
-                f"keychain_path:{keychain_path}",
-                f"keychain_password:{keychain_password}",
-                "force:true"  # ✅ 強制建立新憑證
-            ],
-            capture_output=True,
-            text=True
-        )
-        if result.returncode == 0:
-            # 🚀 解析 `Result:` 後面的憑證 ID
-            stdout = result.stdout  # Fastlane 輸出
-            match = re.search(r"Result:\s*([A-Za-z0-9]+)", stdout)
-            if match:
-                certificate_id = match.group(1)
-                print(f"✅ 成功建立新的 iOS Distribution 憑證 ID: {certificate_id}")
-                return certificate_id  # ✅ 回傳憑證 ID
-            else:
-                print("❌ 未找到憑證 ID")
-                print("📌 Fastlane 輸出：")
-                print(stdout)
-                return None
-        else:
-            print(f"❌ 建立憑證失敗: {result.stderr}")
-            return None
-
-    except Exception as e:
-        print(f"❌ Fastlane 無法建立憑證: {e}")
-        return None
         
 def revoke_certificate(apple_id, cert_id):
     """ 從 App Store Connect 刪除指定憑證 """
@@ -203,12 +158,12 @@ def remove_keychain_certificate(cert):
 def remove_keychain_certificate_by_id(cert_id):
     """ 🚀 透過 `cert_id` 刪除 macOS Keychain 中的憑證與私鑰 """
     keychain.unlock_keychain()
-    keychain_path = keychain_path = os.path.expanduser(config.keychain_path)
+    keychain_path = os.path.expanduser(config.keychain_path)
     cert_file_path = os.path.join(config.cert_dir_path, f"{cert_id}.cer")
-    # 解析 `.cert` 取得憑證名稱
+    # 解析 `.cer` 取得憑證名稱
     cert_name = get_cert_name_from_file(cert_file_path)
     if not cert_name:
-        print("❌ 無法從 `.cert` 檔案讀取憑證名稱，請確認檔案內容是否正確")
+        print("❌ 無法從 `.cer` 檔案讀取憑證名稱，請確認檔案內容是否正確")
         return
     print(f"🔍 正在刪除 `{cert_name}` 及相關的私鑰...")
     key_hash = find_private_key(cert_name)
@@ -222,5 +177,152 @@ def remove_keychain_certificate_by_id(cert_id):
     else:
         print("❌ 未找到私鑰")
 
+def generate_csr(apple_id, csr_path, private_key_path):
+    """使用 OpenSSL 生成 CSR (憑證請求) 和私鑰"""
+    print("🔑 生成 CSR (憑證請求)...")
+    try:
+        # 生成私鑰 - 使用 subprocess.run 並設定 timeout 防止卡住
+        print("正在生成私鑰...")
+        private_key_cmd = [
+            "openssl", "genrsa",
+            "-out", private_key_path,
+            "2048"  # 2048 位 RSA 密鑰
+        ]
+        subprocess.run(private_key_cmd, check=True, capture_output=True, text=True, timeout=30)
+        print(f"✅ 私鑰已生成: {private_key_path}")
+        
+        # 檢查私鑰是否已生成
+        if not os.path.exists(private_key_path) or os.path.getsize(private_key_path) == 0:
+            raise Exception(f"私鑰檔案未成功生成: {private_key_path}")
+        
+        # 生成 CSR - 使用簡單的 subject
+        print("正在生成 CSR...")
+        
+        # 使用簡單的預設值 - 只包含必要的 CN 字段
+        subject = f"/CN=Apple Development: {apple_id}"
+            
+        csr_cmd = [
+            "openssl", "req",
+            "-new",
+            "-key", private_key_path,
+            "-out", csr_path,
+            "-subj", subject,
+            "-nodes",  # 不加密私鑰
+            "-batch"   # 使用批處理模式，不需要互動
+        ]
+        
+        subprocess.run(csr_cmd, check=True, capture_output=True, text=True, timeout=30)
+        print(f"✅ CSR 已生成: {csr_path}")
+        
+        # 檢查 CSR 是否已生成
+        if not os.path.exists(csr_path) or os.path.getsize(csr_path) == 0:
+            raise Exception(f"CSR 檔案未成功生成: {csr_path}")
+        
+    except subprocess.TimeoutExpired:
+        print(f"❌ OpenSSL 命令執行超時")
+        # 嘗試清理未完成的檔案
+        for path in [private_key_path, csr_path]:
+            if os.path.exists(path):
+                try:
+                    os.remove(path)
+                    print(f"已刪除未完成的檔案: {path}")
+                except:
+                    pass
+        raise Exception("生成 CSR 時命令執行超時")
+        
+    except subprocess.CalledProcessError as e:
+        print(f"❌ 生成 CSR 時發生錯誤: {e}")
+        print(f"錯誤輸出: {e.stderr}")
+        raise Exception(f"生成 CSR 失敗: {e.stderr}")
+        
+    except Exception as e:
+        print(f"❌ 意外錯誤: {str(e)}")
+        raise
     
+def submit_csr_to_apple(token, csr_path):
+    """把 CSR 提交至 Apple 產生憑證"""
+    if not os.path.exists(csr_path):
+        raise FileNotFoundError(f"CSR 文件不存在: {csr_path}")
+    with open(csr_path, "rb") as f:
+        csr_raw_content = f.read()
+    csr_text = csr_raw_content.decode('utf-8', errors='ignore')
+    clean_csr = csr_text.replace("-----BEGIN CERTIFICATE REQUEST-----", "") \
+                        .replace("-----END CERTIFICATE REQUEST-----", "") \
+                        .replace("\n", "").strip()
+    csr_content = clean_csr
+    url = "https://api.appstoreconnect.apple.com/v1/certificates"
+    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+    payload = {
+        "data": {
+            "type": "certificates",
+            "attributes": {
+                "certificateType": "IOS_DISTRIBUTION",
+                "csrContent": csr_content
+            }
+        }
+    }
+    print("📡 向 Apple 提交 CSR，請求新憑證...")
+    try:
+        response = requests.post(url, headers=headers, json=payload)
+        response.raise_for_status()
+        certificate = response.json()["data"]
+        cert_content = certificate["attributes"]["certificateContent"]
+        cert_id = certificate["id"]
+        certs_dir = config.cert_dir_path
+        cert_path = os.path.join(certs_dir, f"{cert_id}.cer")
+        with open(cert_path, "wb") as f:
+            f.write(base64.b64decode(cert_content))
+        print(f"✅ 憑證建立成功！\n憑證 ID: {cert_id}\n已儲存於: {cert_path}")
+        return cert_id
+    except requests.exceptions.HTTPError as e:
+        print(f"❌ HTTP 錯誤: {e}")
+        print(f"錯誤詳情: {response.text}")
+        raise  # 重新拋出異常
+    except Exception as e:
+        print(f"❌ 意外錯誤: {str(e)}")
+        raise
+
+def create_certificate(apple_id):
+    """透過 Apple API 創建 iOS Distribution 憑證"""
+    print("📜 開始創建憑證流程...")
+    account = apple_accounts.get_account_by_apple_id(apple_id)
+    key_id = account['key_id']
+    certs_dir = config.cert_dir_path
+    csr_path = os.path.join(certs_dir, f"{key_id}.certSigningRequest")
+    private_key_path = os.path.join(certs_dir, f"{key_id}.pem")
+    cert_path = None  
+    try:
+        # 檢查並移除舊憑證
+        removed_cert_id = revoke_oldest_distribution_certificate(apple_id)
+        if removed_cert_id:
+            remove_keychain_certificate_by_id(removed_cert_id)
+            local_file.remove_local_files(apple_id)
+        else:
+            print(f"✅ 並無需要刪除的憑證")
+        # 生成 CSR 和私鑰
+        generate_csr(apple_id, csr_path, private_key_path)
+        # 提交 CSR 並獲取憑證
+        cert_id = submit_csr_to_apple(token=auth.generate_token(apple_id), csr_path=csr_path)
+        cert_path = os.path.join(certs_dir, f"{cert_id}.cer")
+        # 導入 Keychain
+        keychain.import_cert_to_keychain(private_key_path, cert_path)
+        print("✅ 憑證創建流程完成")
+        return cert_id
+    except Exception as e:
+        print(f"❌ 憑證創建失敗: {str(e)}")
+        raise  # 讓上層調用者處理異常
+    finally:
+        # 清理臨時檔案
+        for path in [csr_path, private_key_path]:
+            if os.path.exists(path):
+                try:
+                    os.remove(path)
+                    print(f"🗑️ 已刪除臨時檔案: {path}")
+                except OSError as e:
+                    print(f"❌ 刪除檔案失敗: {path}, 錯誤: {e}")
+    
+
+
+
+
 

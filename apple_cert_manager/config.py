@@ -9,11 +9,11 @@ class Config:
         self.load_called = False  # ✅ 確保 `.env` 只會載入一次
         self.root_dir = None
         self.api_key_dir_path = None
-        self.api_key_json_dir_path = None
         self.db_path = None
         self.cert_dir_path = None
         self.profile_dir_path = None
         self.ipa_path = None
+        self.ipa_dir_path = None
         self.json_path = None
         self.keychain_path = None
         self.keychain_password = None
@@ -34,10 +34,10 @@ class Config:
         # 📌 **讀取 `.env` 變數**
         self.root_dir = os.getenv("ROOT_DIR")
         self.api_key_dir_path = os.getenv("API_KEY_DIR_PATH")
-        self.api_key_json_dir_path = os.getenv("API_KEY_JSON_DIR_PATH")
         self.db_path = os.getenv("DB_PATH")
         self.cert_dir_path = os.getenv("CERT_DIR_PATH")
         self.profile_dir_path = os.getenv("PROFILE_DIR_PATH")
+        self.ipa_dir_path = os.getenv("IPA_DIR_PATH")
         self.ipa_path = os.getenv("IPA_PATH")
         self.json_path = os.getenv("JSON_PATH")
         self.keychain_path = os.getenv("KEYCHAIN_PATH")
@@ -47,6 +47,25 @@ class Config:
         # ✅ **確保環境變數已載入**
         self.env_loaded = True
         self.load_called = True
+        
+        # 📁 **檢查並建立必要資料夾**
+        dirs_to_check = {
+            "cert_dir_path": self.cert_dir_path,
+            "profile_dir_path": self.profile_dir_path,
+            "ipa_dir_path": self.ipa_dir_path
+        }
+
+        for dir_name, dir_path in dirs_to_check.items():
+            if dir_path:  # 確保路徑不為 None 或空字串
+                if not os.path.exists(dir_path):
+                    try:
+                        os.makedirs(dir_path, exist_ok=True)
+                        print(f"📂 已建立資料夾: {dir_path}")
+                    except OSError as e:
+                        print(f"❌ 無法建立資料夾 {dir_name}: {dir_path}, 錯誤: {e}")
+                        raise  
+            else:
+                print(f"⚠️ {dir_name} 未設定或為空，跳過建立")
 
 # 🚀 **創建 `config` 實例**
 config = Config()

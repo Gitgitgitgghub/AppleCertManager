@@ -21,18 +21,18 @@ def run_subprocess(command, description, check=True, **kwargs):
 def extract_ipa(apple_id):
     """ 🚀 根據 `apple_id` 建立專屬目錄，複製 IPA，並解壓 """
     ipa_source_path = config.ipa_path  # 原始 IPA 位置
-    ipa_base_dir = os.path.dirname(ipa_source_path)
+    ipa_dir_path = config.ipa_dir_path  # IPA 目標資料夾
     # 1️⃣ 🔍 取得 `apple_id` 的前半部分作為目錄名稱
     apple_id_prefix = apple_id.split("@")[0]
-    # 2️⃣ 🚀 創建 `ipa/{apple_id_prefix}/` 目錄
-    apple_ipa_dir = os.path.join(ipa_base_dir, apple_id_prefix)
+    # 2️⃣ 🚀 創建 `ipa_dir_path/{apple_id_prefix}/` 目錄
+    apple_ipa_dir = os.path.join(ipa_dir_path, apple_id_prefix)  # 例如 /Users/brant/Desktop/test1/ipa/{apple_id_prefix}
     os.makedirs(apple_ipa_dir, exist_ok=True)
     # 3️⃣ 🚀 複製 IPA 到新目錄
-    ipa_dest_path = os.path.join(apple_ipa_dir, os.path.basename(ipa_source_path))
+    ipa_dest_path = os.path.join(apple_ipa_dir, os.path.basename(ipa_source_path))  # 例如 /Users/brant/Desktop/test1/ipa/{apple_id_prefix}/app.ipa
     shutil.copy2(ipa_source_path, ipa_dest_path)  # ✅ 確保複製 IPA 時保留 Metadata
     print(f"✅ IPA 已複製到: {ipa_dest_path}")
     # 4️⃣ 🚀 設定解壓目錄
-    unzip_dir = os.path.join(apple_ipa_dir, "unzip")  # ✅ 固定解壓目錄
+    unzip_dir = os.path.join(apple_ipa_dir, "unzip")  # 例如 /Users/brant/Desktop/test1/ipa/{apple_id_prefix}/unzip
     # 5️⃣ 🚀 刪除舊的解壓資料夾，確保新的解壓不會影響舊資料
     shutil.rmtree(unzip_dir, ignore_errors=True)
     # 6️⃣ 🚀 執行解壓
@@ -181,7 +181,7 @@ def resign_ipa(apple_id):
         keychain.configure_keychain_search()
         keychain.set_key_partition_list()
         # 解壓 IPA 文件
-        unzip_dir = extract_ipa(account['apple_id'])
+        unzip_dir = extract_ipa(apple_id)
         # 定義固定路徑：entitlements.plist 和 app_dir
         entitlements_path = os.path.join(unzip_dir, "entitlements.plist")
         payload_dir = os.path.join(unzip_dir, "Payload")

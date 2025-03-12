@@ -42,9 +42,6 @@ KEYCHAIN_PASSWORD="password"
 # 📌 Apple portal 申請來的.p8位置
 API_KEY_DIR_PATH="${ROOT_DIR}/api_key"
 
-# 📌 與apple api 溝通的json 存放位置
-API_KEY_JSON_DIR_PATH="${ROOT_DIR}/api_key_json"
-
 # 📌 資料庫
 DB_PATH="${ROOT_DIR}/apple_account.sqlite"
 
@@ -52,8 +49,10 @@ DB_PATH="${ROOT_DIR}/apple_account.sqlite"
 CERT_DIR_PATH="${ROOT_DIR}/certs"
 PROFILE_DIR_PATH="${ROOT_DIR}/profiles"
 
-# 📌 IPA 相關路徑
-IPA_PATH="${ROOT_DIR}/ipa/app.ipa"
+# 📌 IPA 輸出路徑
+IPA_DIR_PATH="${ROOT_DIR}/ipa"
+# 📌 IPA 原始檔案路徑
+IPA_PATH="${ROOT_DIR}/app.ipa"
 
 # 📌 批次匯入檔案的json位置
 JSON_PATH="${ROOT_DIR}/accounts.json"
@@ -70,11 +69,15 @@ JSON_PATH="${ROOT_DIR}/accounts.json"
 
 ### 4️⃣ 配置ipa位置
 
-在ROOT_DIR建立一個名稱為ipa資料夾並且把要簽名的ipa命名為app.ipa
+重簽名後的ipa會放在以下位置
 ```ini
-IPA_PATH="${ROOT_DIR}/ipa/app.ipa"
+IPA_DIR_PATH="${ROOT_DIR}/ipa"
 ```
-需與.env檔這個參數符合
+要重簽名的ipa命名為app.ipa
+```ini
+IPA_PATH="${ROOT_DIR}/app.ipa"
+```
+.env 配置需要和上面對的上
 
 ## 🔧 使用方式
 

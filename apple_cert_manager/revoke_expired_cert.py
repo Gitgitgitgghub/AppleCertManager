@@ -57,7 +57,7 @@ def revoke_expired_certificates():
         # **移除 macOS 本地憑證**
         for cert in deleted_certificates:
             certificate.remove_keychain_certificate(cert)
-            local_file.remove_local_files(cert['id'])
+            local_file.remove_local_files(apple_id)
         
         # 如果有被刪除的憑證要重新match
         if deleted_certificates:
@@ -89,7 +89,7 @@ def revoke_certificate(apple_id):
     # 🚀 **調用撤銷函數**
     if certificate.revoke_certificate(apple_id, cert_id):
         certificate.remove_keychain_certificate(cert_to_revoke)
-        local_file.remove_local_files(cert_to_revoke['id'])
+        local_file.remove_local_files(apple_id)
         print(f"✅ 成功撤銷憑證 {cert_id}")
     else:
         print(f"❌ 撤銷憑證 {cert_id} 失敗")

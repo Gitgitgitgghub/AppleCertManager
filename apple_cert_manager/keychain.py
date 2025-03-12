@@ -55,6 +55,31 @@ def create_keychain(keychain_path, keychain_password):
     except subprocess.CalledProcessError as e:
         print(f"❌ 建立 Keychain 失敗: {e}")
         
+def import_cert_to_keychain(private_key_path, cert_path):
+    """將私鑰和憑證導入 macOS Keychain"""
+    print("🔐 將憑證和私鑰導入 Keychain...")
+    try:
+        unlock_keychain()
+        keychain_path = os.path.expanduser(config.keychain_path)
+        # 導入私鑰
+        subprocess.run([
+            "security", "import", private_key_path,
+            "-k", keychain_path,
+            "-T", "/usr/bin/codesign"  # 允許 codesign 訪問
+        ], check=True)
+        print(f"✅ 私鑰已導入 Keychain: {private_key_path}")
+        # 導入憑證
+        subprocess.run([
+            "security", "import", cert_path,
+            "-k", keychain_path,
+            "-T", "/usr/bin/codesign"
+        ], check=True)
+        print(f"✅ 憑證已導入 Keychain: {cert_path}")
+
+    except subprocess.CalledProcessError as e:
+        print(f"❌ 導入 Keychain 失敗: {e}")
+        raise
+        
 def configure_keychain_search():
     """設定自訂 Keychain 為預設搜索範圍"""
     try:
@@ -147,8 +172,10 @@ def install_apple_wwdr_certificate():
         return False
         
 def run_subprocess(command, description):
-    """🚀 執行 Shell 命令，並隱藏無用輸出"""
+    """🚀 執行 Shell 命令，並在失敗時拋出異常"""
     try:
-        subprocess.run(command, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        result = subprocess.run(command, check=True, capture_output=True, text=True)
+        return result
     except subprocess.CalledProcessError as e:
-        print(f"❌ {description} 失敗: {e}")
+        print(f"❌ {description} 失敗: {e.stderr.strip() or str(e)}")
+        raise
