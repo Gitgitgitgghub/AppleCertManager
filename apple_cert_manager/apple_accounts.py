@@ -2,7 +2,9 @@ import sqlite3
 import os
 import json
 import sys
+import logging
 import concurrent.futures
+import logging
 from . import match
 from . import local_file
 from . import certificate
@@ -10,6 +12,8 @@ from . import database
 from apple_cert_manager.config import config
 from datetime import datetime
 from functools import wraps
+
+logging.basicConfig(level=logging.INFO)
 
 # ✅ 確保資料庫只初始化一次
 DATABASE_INITIALIZED = False
@@ -61,8 +65,8 @@ def get_account_by_apple_id(apple_id):
     if account:
         return account
     else:
-        print(f"⚠️ 找不到 Apple ID: {apple_id}")
-        return None
+        logging.error(f"❌ 找不到 Apple ID: {apple_id} 的帳戶資訊")
+        raise
 
 @ensure_database_initialized
 def insert_account(apple_id, issuer_id, key_id):
@@ -74,7 +78,7 @@ def insert_account(apple_id, issuer_id, key_id):
         # 🔍 檢查 `apple_id` 是否已存在
         cursor.execute("SELECT 1 FROM accounts WHERE apple_id = ?", (apple_id,))
         if cursor.fetchone():
-            print(f"⚠️ Apple ID `{apple_id}` 已存在，跳過插入")
+            logging.warning(f"⚠️ Apple ID `{apple_id}` 已存在，跳過插入")
             conn.close()
             return False  # ✅ 已存在則跳過
 

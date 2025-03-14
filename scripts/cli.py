@@ -1,5 +1,37 @@
 import argparse
+import logging
+from rich.logging import RichHandler
+from rich.console import Console
 from apple_cert_manager.config import config
+
+# 自訂 Formatter，讓整條訊息根據級別變色
+class ColoredMessageFormatter(logging.Formatter):
+    LEVEL_COLORS = {
+        logging.DEBUG: "cyan",
+        logging.INFO: "green",
+        logging.WARNING: "yellow",
+        logging.ERROR: "red",
+        logging.CRITICAL: "red,bold",
+    }
+
+    def format(self, record):
+        message = super().format(record)
+        color = self.LEVEL_COLORS.get(record.levelno, "white")
+        return f"[{color}]{message}[/{color}]"
+
+# 配置 Rich 日誌
+console = Console()
+logging.getLogger().handlers.clear()
+handler = RichHandler(
+    rich_tracebacks=True,
+    show_time=False,
+    show_path=False,
+    show_level=True,
+    console=console
+)
+formatter = ColoredMessageFormatter("%(levelname)s:%(name)s:%(message)s")
+handler.setFormatter(formatter)
+logging.basicConfig(level=logging.INFO, handlers=[handler])
 
 def load_modules():
     """📌 動態加載模組，確保 `.env` 先載入"""
