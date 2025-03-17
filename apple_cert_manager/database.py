@@ -1,6 +1,9 @@
 import sqlite3
 from apple_cert_manager.config import config 
 import os
+import logging
+
+logging = logging.getLogger(__name__)
 
 def initialize_database():
     """ 初始化 SQLite 資料庫，建立 accounts 表格，包含 cert_id """
@@ -24,7 +27,7 @@ def initialize_database():
 
     conn.commit()
     conn.close()
-    print(f"✅ SQLite 資料庫已初始化: {db_path}")
+    logging.info(f"✅ SQLite 資料庫已初始化: {db_path}")
 
 # 🚀 執行初始化
 if __name__ == "__main__":

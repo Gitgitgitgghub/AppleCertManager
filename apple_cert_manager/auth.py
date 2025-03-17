@@ -5,7 +5,7 @@ from apple_cert_manager.config import config
 from . import apple_accounts
 from datetime import datetime, timedelta
 
-logging.basicConfig(level=logging.INFO)
+logging = logging.getLogger(__name__)
 
 
 def generate_token(apple_id):

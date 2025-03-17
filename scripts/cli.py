@@ -1,42 +1,11 @@
 import argparse
-import logging
-from rich.logging import RichHandler
-from rich.console import Console
 from apple_cert_manager.config import config
 
-# 自訂 Formatter，讓整條訊息根據級別變色
-class ColoredMessageFormatter(logging.Formatter):
-    LEVEL_COLORS = {
-        logging.DEBUG: "cyan",
-        logging.INFO: "green",
-        logging.WARNING: "yellow",
-        logging.ERROR: "red",
-        logging.CRITICAL: "red,bold",
-    }
-
-    def format(self, record):
-        message = super().format(record)
-        color = self.LEVEL_COLORS.get(record.levelno, "white")
-        return f"[{color}]{message}[/{color}]"
-
-# 配置 Rich 日誌
-console = Console()
-logging.getLogger().handlers.clear()
-handler = RichHandler(
-    rich_tracebacks=True,
-    show_time=False,
-    show_path=False,
-    show_level=True,
-    console=console
-)
-formatter = ColoredMessageFormatter("%(levelname)s:%(name)s:%(message)s")
-handler.setFormatter(formatter)
-logging.basicConfig(level=logging.INFO, handlers=[handler])
 
 def load_modules():
     """📌 動態加載模組，確保 `.env` 先載入"""
     global insert_account, delete_account, query_accounts, insert_from_json
-    global register_device
+    global register_device_and_resign
     global resign_ipa, batch_resign_all_accounts
     global revoke_expired_certificates, revoke_certificate
 
@@ -46,7 +15,7 @@ def load_modules():
         query_accounts,
         insert_from_json,
     )
-    from apple_cert_manager.profile import register_device
+    from apple_cert_manager.register_device_and_resign import register_device_and_resign
     from apple_cert_manager.resign_ipa import resign_ipa, batch_resign_all_accounts
     from apple_cert_manager.revoke_expired_cert import revoke_expired_certificates, revoke_certificate
 
@@ -106,8 +75,6 @@ def main():
         delete_account(args.apple_id)
 
     elif args.command == "query":
-        print(f"✅ .env 已載入: {args.env}")
-        print(f"🔍 db_path: {config.db_path}")
         query_accounts()
 
     elif args.command == "import":
@@ -115,9 +82,7 @@ def main():
         insert_from_json(json_path)
 
     elif args.command == "register_device":
-        result = register_device(args.apple_id, args.name, args.uuid)
-        if result:
-            resign_ipa(args.apple_id)
+        register_device_and_resign(args.apple_id, args.name, args.uuid)
 
     elif args.command == "resign":
         batch_resign_all_accounts()

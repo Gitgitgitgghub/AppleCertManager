@@ -12,7 +12,7 @@ from apple_cert_manager.config import config
 from . import keychain
 from datetime import datetime
         
-logging.basicConfig(level=logging.INFO)
+logging = logging.getLogger(__name__)
         
 def revoke_certificate(apple_id, cert_id):
     """從 App Store Connect 刪除指定憑證。
@@ -161,7 +161,7 @@ def get_cert_name_from_file(cert_file_path):
         str or None: 憑證名稱，若失敗則返回 None。
     """
     if not os.path.exists(cert_file_path):
-        logging.error(f"憑證檔案不存在: {cert_file_path}")
+        logging.warning(f"憑證檔案不存在: {cert_file_path}")
         return None
     get_cert_name_command = ["openssl", "x509", "-noout", "-subject", "-in", cert_file_path]
     result = subprocess.run(get_cert_name_command, capture_output=True, text=True)
@@ -182,7 +182,7 @@ def get_cer_sha1(cert_id):
     """
     cert_file_path = os.path.join(config.cert_dir_path, f"{cert_id}.cer")
     if not os.path.exists(cert_file_path):
-        logging.error(f"憑證檔案不存在: {cert_file_path}")
+        logging.warning(f"憑證檔案不存在: {cert_file_path}")
         return None
     sha1 = hashlib.sha1()
     with open(cert_file_path, "rb") as f:

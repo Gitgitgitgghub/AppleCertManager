@@ -4,7 +4,6 @@ import json
 import sys
 import logging
 import concurrent.futures
-import logging
 from . import match
 from . import local_file
 from . import certificate
@@ -13,7 +12,7 @@ from apple_cert_manager.config import config
 from datetime import datetime
 from functools import wraps
 
-logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # ✅ 確保資料庫只初始化一次
 DATABASE_INITIALIZED = False
@@ -65,7 +64,7 @@ def get_account_by_apple_id(apple_id):
     if account:
         return account
     else:
-        logging.error(f"❌ 找不到 Apple ID: {apple_id} 的帳戶資訊")
+        logger.error(f"❌ 找不到 Apple ID: {apple_id} 的帳戶資訊")
         raise
 
 @ensure_database_initialized
@@ -78,7 +77,7 @@ def insert_account(apple_id, issuer_id, key_id):
         # 🔍 檢查 `apple_id` 是否已存在
         cursor.execute("SELECT 1 FROM accounts WHERE apple_id = ?", (apple_id,))
         if cursor.fetchone():
-            logging.warning(f"⚠️ Apple ID `{apple_id}` 已存在，跳過插入")
+            logger.warning(f"⚠️ Apple ID `{apple_id}` 已存在，跳過插入")
             conn.close()
             return False  # ✅ 已存在則跳過
 
@@ -90,12 +89,12 @@ def insert_account(apple_id, issuer_id, key_id):
 
         conn.commit()
         conn.close()
-        print(f"✅ 新增 Apple ID `{apple_id}` 成功")
+        logger.info(f"✅ 新增 Apple ID `{apple_id}` 成功")
         match.match_apple_account(apple_id)
         return True  # ✅ 插入成功
 
     except sqlite3.Error as e:
-        print(f"❌ 插入 Apple ID `{apple_id}` 失敗: {e}")
+        logger.info(f"❌ 插入 Apple ID `{apple_id}` 失敗: {e}")
         return False
         
 @ensure_database_initialized
@@ -109,7 +108,7 @@ def update_cert_id(apple_id, cert_id):
     count = cursor.fetchone()[0]
 
     if count == 0:
-        print(f"⚠️ Apple ID {apple_id} 不存在，無法更新 cert_id")
+        logger.info(f"⚠️ Apple ID {apple_id} 不存在，無法更新 cert_id")
         conn.close()
         return False
 
@@ -122,7 +121,7 @@ def update_cert_id(apple_id, cert_id):
 
     conn.commit()
     conn.close()
-    print(f"✅ Apple ID {apple_id} 的 cert_id 更新為 {cert_id}")
+    logger.info(f"✅ Apple ID {apple_id} 的 cert_id 更新為 {cert_id}")
     return True
 
 @ensure_database_initialized
@@ -135,7 +134,7 @@ def clear_cert_id(apple_id):
     row = cursor.fetchone()
 
     if not row:
-        print(f"⚠️ Apple ID {apple_id} 不存在，無法清除 cert_id")
+        logger.info(f"⚠️ Apple ID {apple_id} 不存在，無法清除 cert_id")
         conn.close()
         return False
 
@@ -150,7 +149,7 @@ def clear_cert_id(apple_id):
 
     conn.commit()
     conn.close()
-    print(f"✅ Apple ID {apple_id} 的 cert_id 已清除")
+    logger.info(f"✅ Apple ID {apple_id} 的 cert_id 已清除")
     return True
         
 
@@ -159,14 +158,14 @@ def insert_from_json(json_path=None):
 
     json_path = json_path or config.JSON_PATH  # ✅ 預設 JSON 檔案
     if not os.path.exists(json_path):
-        print(f"❌ 找不到 JSON 檔案: {json_path}")
+        logger.info(f"❌ 找不到 JSON 檔案: {json_path}")
         return
 
     with open(json_path, "r", encoding="utf-8") as file:
         try:
             accounts = json.load(file)
             if not isinstance(accounts, list):
-                print("❌ JSON 格式錯誤，應該是陣列")
+                logger.info("❌ JSON 格式錯誤，應該是陣列")
                 return
 
             # 🚀 使用 ThreadPoolExecutor 來並行插入帳號
@@ -177,7 +176,7 @@ def insert_from_json(json_path=None):
                     acc.get("key_id")
                 ), accounts))
         except json.JSONDecodeError:
-            print("❌ JSON 解析錯誤")
+            logger.info("❌ JSON 解析錯誤")
 
 
 @ensure_database_initialized
@@ -191,7 +190,7 @@ def delete_account(apple_id):
     row = cursor.fetchone()
 
     if not row:
-        print(f"⚠️ Apple ID {apple_id} 不存在，無法刪除")
+        logger.info(f"⚠️ Apple ID {apple_id} 不存在，無法刪除")
         conn.close()
         return False
 
@@ -199,12 +198,12 @@ def delete_account(apple_id):
     # ✅ 如果 `cert_id` 存在，則刪除本地憑證檔案
     if cert_id:
         certificate.remove_keychain_certificate_by_id(cert_id)
-        local_file.remove_local_files(apple_id)
+        local_file.remove_local_files(cert_id)
     # ✅ 刪除帳號
     cursor.execute("DELETE FROM accounts WHERE apple_id = ?", (apple_id,))
     conn.commit()
     conn.close()
-    print(f"✅ 已刪除 Apple ID: {apple_id}")
+    logger.info(f"✅ 已刪除 Apple ID: {apple_id}")
 
     
     return True
@@ -219,9 +218,9 @@ def query_accounts():
     conn.close()
 
     if not accounts:
-        print("⚠️ 沒有任何帳戶資料")
+        logger.info("⚠️ 沒有任何帳戶資料")
     else:
         for account in accounts:
-            print(f"📜 Apple ID: {account[0]}, Issuer ID: {account[1]}, Key ID: {account[2]}, Cert ID: {account[3] or '❌ 無憑證'}, Created At: {account[4] or 'N/A'}")
+            logger.info(f"📜 Apple ID: {account[0]}, Issuer ID: {account[1]}, Key ID: {account[2]}, Cert ID: {account[3] or '❌ 無憑證'}, Created At: {account[4] or 'N/A'}")
 
 
