@@ -205,16 +205,4 @@ python3 scripts/cli.py --env /Users/brant/Desktop/test1/.env query
 * `.env` 檔案存在且路徑正確
 * 指令有**指定** `--env`
 
-你可以**手動檢查** `.env` 是否載入：
-
-```bash
-python3 scripts/cli.py --env /Users/brant/Desktop/test1/.env query
-```
-
-如果 `.env` 成功載入，你應該會看到：
-
-```bash
-✅ .env 已載入: /Users/brant/Desktop/test1/.env
-🔍 db_path: /Users/brant/Desktop/test1/apple_account.sqlite
-```
 

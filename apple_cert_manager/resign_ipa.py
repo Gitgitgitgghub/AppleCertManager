@@ -138,7 +138,7 @@ def repackage_ipa(unzip_dir, resigned_ipa_path):
         os.remove(resigned_ipa_path)
     try:
         subprocess.run(["zip", "-qr", resigned_ipa_path, "Payload"], cwd=unzip_dir, check=True, text=True, capture_output=True)
-        logging.info(f"已成功重新打包 IPA 文件: {resigned_ipa_path}")
+        #logging.info(f"已成功重新打包 IPA 文件: {resigned_ipa_path}")
     except subprocess.CalledProcessError as e:
         logging.error(f"重新打包 IPA 文件失敗: {e.stderr or e.stdout or str(e)}")
         raise
