@@ -115,7 +115,7 @@ def restore_default_keychain(original_keychains):
                 ["security", "list-keychains", "-s"] + original_keychains,
                 check=True
             )
-            logging.info(f"已恢復預設鑰匙圈：{original_keychains}")
+            #logging.info(f"已恢復預設鑰匙圈：{original_keychains}")
         except Exception as e:
             raise Exception(f"恢復預設鑰匙圈失敗：{e}")
             
@@ -146,7 +146,7 @@ def install_apple_wwdr_certificate():
     keychain_path = os.path.expanduser(config.keychain_path)
     # 2️⃣ 檢查是否已安裝
     if is_apple_wwdr_installed(keychain_path):
-        print(f"✅ `Apple WWDR CA` 憑證已安裝於 {keychain_path}，無需重新安裝")
+        logging.info(f"✅ `Apple WWDR CA` 憑證已安裝於 {keychain_path}，無需重新安裝")
         return True
     logging.info(f"🔍 `Apple WWDR CA` 憑證未安裝於 {keychain_path}，正在下載...")
     try:

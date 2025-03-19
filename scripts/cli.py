@@ -6,7 +6,7 @@ def load_modules():
     """📌 動態加載模組，確保 `.env` 先載入"""
     global insert_account, delete_account, query_accounts, insert_from_json
     global register_device_and_resign
-    global resign_ipa, batch_resign_all_accounts
+    global resign_ipa, batch_resign_all_accounts, resign_single_account
     global revoke_expired_certificates, revoke_certificate
 
     from apple_cert_manager.apple_accounts import (
@@ -16,7 +16,7 @@ def load_modules():
         insert_from_json,
     )
     from apple_cert_manager.register_device_and_resign import register_device_and_resign
-    from apple_cert_manager.resign_ipa import resign_ipa, batch_resign_all_accounts
+    from apple_cert_manager.resign_ipa import resign_ipa, batch_resign_all_accounts, resign_single_account
     from apple_cert_manager.revoke_expired_cert import revoke_expired_certificates, revoke_certificate
 
 def main():
@@ -52,7 +52,10 @@ def main():
     parser_register_device.add_argument("uuid", help="設備 UUID")
 
     # 🎯 **重新簽名**
-    subparsers.add_parser("resign", help="🔄 使用所有帳號重簽 IPA")
+    parser_resign = subparsers.add_parser("resign", help="🔄 使用指定帳號或所有帳號重簽 IPA")
+    parser_resign.add_argument(
+        "apple_id", nargs="?", default=None, help="Apple ID (Email)，可選。若不提供，則批量重簽所有帳號"
+    )
 
     # 🎯 **憑證管理**
     parser_revoke_expired_cert = subparsers.add_parser("revoke_expired_cert", help="🗑 刪除所有帳號過期的發佈憑證")
@@ -85,7 +88,11 @@ def main():
         register_device_and_resign(args.apple_id, args.name, args.uuid)
 
     elif args.command == "resign":
-        batch_resign_all_accounts()
+        if args.apple_id:  # 如果提供了 apple_id
+            account = {"apple_id": args.apple_id}  # 模擬 account 結構
+            resign_single_account(account)
+        else:  # 沒有提供 apple_id，執行批量重簽
+            batch_resign_all_accounts()
 
     elif args.command == "revoke_expired_cert":
         revoke_expired_certificates()

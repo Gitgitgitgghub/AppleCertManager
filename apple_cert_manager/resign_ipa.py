@@ -2,236 +2,232 @@ import subprocess
 import os
 import shutil
 import plistlib
+import logging
 import concurrent.futures
-from apple_cert_manager.config import config 
+from rich.progress import Progress
+from apple_cert_manager.config import config
 from . import apple_accounts
 from . import keychain
 from . import certificate
 
-def run_subprocess(command, description, check=True, **kwargs):
-    """通用的子程序運行工具"""
-    try:
-        #log(f"執行命令: {' '.join(command)}")
-        result = subprocess.run(command, check=check, text=True, **kwargs)
-        return result
-    except subprocess.CalledProcessError as e:
-        print(f"{description} 失敗: {e.stderr if e.stderr else str(e)}")
-        raise
-
-def extract_ipa(apple_id):
-    """ 🚀 根據 `apple_id` 建立專屬目錄，複製 IPA，並解壓 """
-    ipa_source_path = config.ipa_path  # 原始 IPA 位置
-    ipa_dir_path = config.ipa_dir_path  # IPA 目標資料夾
-    # 1️⃣ 🔍 取得 `apple_id` 的前半部分作為目錄名稱
-    apple_id_prefix = apple_id.split("@")[0]
-    # 2️⃣ 🚀 創建 `ipa_dir_path/{apple_id_prefix}/` 目錄
-    apple_ipa_dir = os.path.join(ipa_dir_path, apple_id_prefix)  # 例如 /Users/brant/Desktop/test1/ipa/{apple_id_prefix}
+def extract_ipa(apple_ipa_dir, ipa_dest_path, unzip_dir):
     os.makedirs(apple_ipa_dir, exist_ok=True)
-    # 3️⃣ 🚀 複製 IPA 到新目錄
-    ipa_dest_path = os.path.join(apple_ipa_dir, os.path.basename(ipa_source_path))  # 例如 /Users/brant/Desktop/test1/ipa/{apple_id_prefix}/app.ipa
-    shutil.copy2(ipa_source_path, ipa_dest_path)  # ✅ 確保複製 IPA 時保留 Metadata
-    print(f"✅ IPA 已複製到: {ipa_dest_path}")
-    # 4️⃣ 🚀 設定解壓目錄
-    unzip_dir = os.path.join(apple_ipa_dir, "unzip")  # 例如 /Users/brant/Desktop/test1/ipa/{apple_id_prefix}/unzip
-    # 5️⃣ 🚀 刪除舊的解壓資料夾，確保新的解壓不會影響舊資料
+    shutil.copy2(config.ipa_path, ipa_dest_path)
     shutil.rmtree(unzip_dir, ignore_errors=True)
-    # 6️⃣ 🚀 執行解壓
-    run_subprocess(["unzip", "-q", ipa_dest_path, "-d", unzip_dir], "解壓 IPA 文件")
-    print(f"✅ 已解壓 IPA 至: {unzip_dir}")
+    try:
+        subprocess.run(["unzip", "-q", ipa_dest_path, "-d", unzip_dir], check=True, text=True, capture_output=True)
+    except subprocess.CalledProcessError as e:
+        logging.error(f"解壓 IPA 文件失敗: {e.stderr or e.stdout or str(e)}")
+        raise
     return unzip_dir
 
-def extract_entitlements(provisioning_profile_path, output_path):
-    """🚀 從 Provisioning Profile (`.mobileprovision`) 提取 `Entitlements.plist`"""
-
-    # 1️⃣ 🔍 確保檔案存在
-    if not os.path.exists(provisioning_profile_path):
-        print(f"❌ 描述文件不存在: {provisioning_profile_path}")
-        raise FileNotFoundError(f"未找到 Provisioning Profile: {provisioning_profile_path}")
-
-    try:
-        # 2️⃣ 🚀 解析 Provisioning Profile (`security cms -D -i`)
-        result = run_subprocess(
-            ["security", "cms", "-D", "-i", provisioning_profile_path],
-            "解析描述文件",
-            stdout=subprocess.PIPE
-        )
-        # 3️⃣ 解析 Plist 資料
-        plist_data = plistlib.loads(result.stdout.encode())
-        entitlements = plist_data.get("Entitlements", {})
-        if not entitlements:
-            raise ValueError("❌ 未找到 `Entitlements` 欄位")
-        # 4️⃣ ✅ 輸出到 `output_path`
-        with open(output_path, "wb") as plist_file:
-            plistlib.dump(entitlements, plist_file)
-
-        print(f"✅ 已提取 Entitlements 至: {output_path}")
-        return output_path
-
-    except Exception as e:
-        print(f"❌ 提取 Entitlements 失敗: {e}")
-        raise
-    
-def replace_provisioning_profile(unzip_dir, provisioning_profile_path):
-    """🚀 替換 `.app` 內的 `embedded.mobileprovision`"""
-    # 1️⃣ 🔍 確保 Provisioning Profile 存在
-    if not os.path.exists(provisioning_profile_path):
-        raise FileNotFoundError(f"❌ 描述文件不存在: {provisioning_profile_path}")
-    # 2️⃣ 🔍 確保 Payload 資料夾存在
-    app_path = os.path.join(unzip_dir, "Payload")
-    if not os.path.exists(app_path):
-        raise FileNotFoundError("❌ `Payload` 資料夾未找到，請檢查 IPA 結構是否正確。")
-    # 3️⃣ 🔍 找到 `.app` 目錄
+def get_app_dir(unzip_dir):
+    payload_path = os.path.join(unzip_dir, "Payload")
     app_dir = next(
-        (os.path.join(app_path, item) for item in os.listdir(app_path) if item.endswith(".app")),
-        None,
+        (os.path.join(payload_path, item) for item in os.listdir(payload_path) if item.endswith(".app")),
+        None
     )
     if not app_dir:
-        raise FileNotFoundError("❌ 無法找到 `.app` 目錄，請檢查 IPA 結構。")
+        raise FileNotFoundError("無法找到 .app 目錄")
+    return app_dir
 
-    # 4️⃣ 🚀 替換 `embedded.mobileprovision`
+def replace_bundle_id(app_dir, new_bundle_id):
+    info_plist_path = os.path.join(app_dir, "Info.plist")
+    with open(info_plist_path, "rb") as f:
+        info_plist = plistlib.load(f)
+    old_bundle_id = info_plist.get("CFBundleIdentifier", "")
+    if old_bundle_id != new_bundle_id:
+        info_plist["CFBundleIdentifier"] = new_bundle_id
+        with open(info_plist_path, "wb") as f:
+            plistlib.dump(info_plist, f)
+        logging.info(f"已將 Bundle ID 從 {old_bundle_id} 替換為 {new_bundle_id}")
+    return new_bundle_id
+
+def extract_entitlements(provisioning_profile_path, entitlements_path):
+    try:
+        output = subprocess.run(
+            ["security", "cms", "-D", "-i", provisioning_profile_path],
+            check=True, text=True, capture_output=True
+        ).stdout
+    except subprocess.CalledProcessError as e:
+        logging.error(f"解析描述文件失敗: {e.stderr or e.stdout or str(e)}")
+        raise
+    plist_data = plistlib.loads(output.encode())
+    entitlements = plist_data.get("Entitlements", {})
+    with open(entitlements_path, "wb") as plist_file:
+        plistlib.dump(entitlements, plist_file)
+    logging.info(f"已提取 Entitlements 至: {entitlements_path}")
+    return entitlements_path
+
+def replace_provisioning_profile(unzip_dir, provisioning_profile_path):
+    app_dir = get_app_dir(unzip_dir)
     embedded_profile_path = os.path.join(app_dir, "embedded.mobileprovision")
     shutil.copy(provisioning_profile_path, embedded_profile_path)
-    print(f"✅ 已替換 `embedded.mobileprovision`: {embedded_profile_path}")
-    return app_dir  # ✅ 回傳 `.app` 目錄
+    logging.info(f"已替換 embedded.mobileprovision: {embedded_profile_path}")
+    return app_dir
 
 def remove_code_signature(app_dir):
-    """刪除應用中的簽名"""
     code_signature_path = os.path.join(app_dir, "_CodeSignature")
-    shutil.rmtree(code_signature_path, ignore_errors=True)
-    
-def sign_app(app_dir, signing_identity, entitlements_path):
-    """簽名應用"""
-    print(f"開始簽名應用：{app_dir}")
-    keychain_path = os.path.expanduser(config.keychain_path)
+    if os.path.exists(code_signature_path):
+        shutil.rmtree(code_signature_path)
+        logging.info(f"已移除舊簽名: {code_signature_path}")
+
+def sign_app(app_dir, signing_identity, entitlements_path, keychain_path):
+    # 簽名嵌套應用和擴展
+    for root, dirs, _ in os.walk(app_dir):
+        for d in dirs:
+            if d.endswith((".app", ".appex")):
+                nested_path = os.path.join(root, d)
+                #logging.info(f"簽名嵌套應用: {nested_path}")
+                sign_single_app(nested_path, signing_identity, entitlements_path, keychain_path)
+
+    # 簽名框架和動態庫
+    frameworks_dir = os.path.join(app_dir, "Frameworks")
+    if os.path.exists(frameworks_dir):
+        for item in os.listdir(frameworks_dir):
+            if item.endswith((".framework", ".dylib")):
+                framework_path = os.path.join(frameworks_dir, item)
+                #logging.info(f"簽名框架: {framework_path}")
+                try:
+                    subprocess.run([
+                        "codesign", "--force", "--sign", signing_identity,
+                        "--keychain", keychain_path, "--generate-entitlement-der",
+                        framework_path
+                    ], check=True, text=True, capture_output=True)
+                except subprocess.CalledProcessError as e:
+                    logging.error(f"簽名框架失敗: {framework_path}: {e.stderr or e.stdout or str(e)}")
+                    raise
+
+    # 簽名 OnDemandResources
+    odr_dir = os.path.join(os.path.dirname(app_dir), "OnDemandResources")
+    if os.path.exists(odr_dir):
+        for item in os.listdir(odr_dir):
+            if item.endswith(".assetpack"):
+                assetpack_path = os.path.join(odr_dir, item)
+                remove_code_signature(assetpack_path)
+                #logging.info(f"簽名 OnDemandResource: {assetpack_path}")
+                try:
+                    subprocess.run([
+                        "codesign", "--force", "--sign", signing_identity,
+                        "--keychain", keychain_path, "--generate-entitlement-der",
+                        assetpack_path
+                    ], check=True, text=True, capture_output=True)
+                except subprocess.CalledProcessError as e:
+                    logging.error(f"簽名 OnDemandResource 失敗: {assetpack_path}: {e.stderr or e.stdout or str(e)}")
+                    raise
+
+    # 簽名主應用
+    sign_single_app(app_dir, signing_identity, entitlements_path, keychain_path)
+
+def sign_single_app(app_path, signing_identity, entitlements_path, keychain_path):
+    command = [
+        "codesign", "--force", "--sign", signing_identity,
+        "--entitlements", entitlements_path, "--keychain", keychain_path,
+        "--generate-entitlement-der", "--timestamp", "--options", "runtime",
+        app_path
+    ]
     try:
-        run_subprocess(
-            [
-                "codesign",
-                "--force",
-                "--sign", signing_identity,
-                "--entitlements", entitlements_path,
-                "--keychain", keychain_path,
-                "--deep",
-                app_dir,
-            ],
-            "簽名應用"
-        )
-        #log(f"已成功簽名應用：{app_dir}")
-    except Exception as e:
-        print(f"簽名失敗：{e}")
+        subprocess.run(command, check=True, text=True, capture_output=True)
+        logging.info(f"已成功簽名應用: {app_path}")
+    except subprocess.CalledProcessError as e:
+        logging.error(f"簽名應用失敗: {app_path}: {e.stderr or e.stdout or str(e)}")
         raise
 
-def repackage_ipa(unzip_dir):
-    """🚀 重新打包 IPA 文件，並將其存放在 `unzip_dir` 的上層目錄"""
-    
-    parent_dir = os.path.dirname(unzip_dir)  # ✅ `unzip_dir` 的上層目錄
-    resigned_ipa_path = os.path.join(parent_dir, "resigned.ipa")  # ✅ `_resigned.ipa` 存放在上層
-
+def repackage_ipa(unzip_dir, resigned_ipa_path):
     if os.path.exists(resigned_ipa_path):
         os.remove(resigned_ipa_path)
-
-    payload_path = os.path.join(unzip_dir, "Payload")
-    if not os.path.isdir(payload_path):
-        raise FileNotFoundError(f"❌ Payload 資料夾未找到：{payload_path}")
-
     try:
-        # 🚀 讓 zip 生成 `resigned.ipa` 在 `parent_dir` 下
-        subprocess.run(
-            ["zip", "-qr", resigned_ipa_path, "Payload"],
-            cwd=unzip_dir,  # ✅ 確保 zip 在 `unzip_dir` 內執行
-            check=True
-        )
-        print(f"✅ 已成功重新打包 IPA 文件：{resigned_ipa_path}")
-        return resigned_ipa_path
-
+        subprocess.run(["zip", "-qr", resigned_ipa_path, "Payload"], cwd=unzip_dir, check=True, text=True, capture_output=True)
+        logging.info(f"已成功重新打包 IPA 文件: {resigned_ipa_path}")
     except subprocess.CalledProcessError as e:
-        raise RuntimeError(f"❌ 重新打包 IPA 文件失敗：{e}")
+        logging.error(f"重新打包 IPA 文件失敗: {e.stderr or e.stdout or str(e)}")
+        raise
+    return resigned_ipa_path
 
-def clean_up(unzip_dir):
-    """清理臨時文件"""
+def clean_up(unzip_dir, copy_ipa_path):
+    if os.path.exists(unzip_dir):
+        shutil.rmtree(unzip_dir)
+    if os.path.exists(copy_ipa_path):
+        os.remove(copy_ipa_path)
+
+def validate_signing_identity(signing_identity):
     try:
-        shutil.rmtree(unzip_dir, ignore_errors=True)
-        print(f"已刪除解壓目錄：{unzip_dir}")
-    except Exception as e:
-        print(f"清理臨時文件失敗：{e}")
+        output = subprocess.run(
+            ["security", "find-identity", "-v", "-p", "codesigning"],
+            check=True, text=True, capture_output=True
+        ).stdout
+    except subprocess.CalledProcessError as e:
+        logging.error(f"無法驗證簽名身份: {e.stderr or e.stdout or str(e)}")
+        raise
+    if signing_identity not in output:
+        raise ValueError(f"簽名身份無效或不在鑰匙圈中: {signing_identity}")
+    logging.info(f"簽名身份驗證通過: {signing_identity}")
 
 def resign_ipa(apple_id):
-    """主流程：重簽 IPA 文件"""
     account = apple_accounts.get_account_by_apple_id(apple_id)
-    if not account:
-        print(f"❌ 找不到 Apple ID: {apple_id}，無法取得憑證")
-        return False
-    keychain.unlock_keychain()
-    keychain.install_apple_wwdr_certificate()
+    apple_id_prefix = apple_id.split("@")[0]
+    apple_ipa_dir = os.path.join(config.ipa_dir_path, apple_id_prefix)
+    ipa_dest_path = os.path.join(apple_ipa_dir, os.path.basename(config.ipa_path))
+    unzip_dir = os.path.join(apple_ipa_dir, "unzip")
     cert_id = account['cert_id']
-    signing_identity = certificate.get_cer_sha1(cert_id)
     profile_path = os.path.join(config.profile_dir_path, f"adhoc_{cert_id}.mobileprovision")
-    entitlements_path = None
-    unzip_dir = None
-    app_dir = None
-    original_keychains = []
+    entitlements_path = os.path.join(unzip_dir, "entitlements.plist")
+    keychain_path = os.path.expanduser(config.keychain_path)
+    resigned_ipa_path = os.path.join(apple_ipa_dir, "resigned.ipa")
+    
+    signing_identity = certificate.get_cer_sha1(cert_id)
+    validate_signing_identity(signing_identity)
+    
     try:
-        # 記錄當前預設鑰匙圈
-        result = subprocess.run(
-            ["security", "list-keychains"], stdout=subprocess.PIPE, text=True, check=True
-        )
-        original_keychains = [
-            keychain.strip().strip('"') for keychain in result.stdout.splitlines()
-        ]
+        output = subprocess.run(["security", "list-keychains"], check=True, text=True, capture_output=True).stdout
+        original_keychains = [kc.strip().strip('"') for kc in output.splitlines()]
+    except subprocess.CalledProcessError as e:
+        logging.error(f"獲取鑰匙圈列表失敗: {e.stderr or e.stdout or str(e)}")
+        raise
+    
+    try:
+        keychain.unlock_keychain()
+        keychain.install_apple_wwdr_certificate()
         keychain.configure_keychain_search()
         keychain.set_key_partition_list()
-        # 解壓 IPA 文件
-        unzip_dir = extract_ipa(apple_id)
-        # 定義固定路徑：entitlements.plist 和 app_dir
-        entitlements_path = os.path.join(unzip_dir, "entitlements.plist")
-        payload_dir = os.path.join(unzip_dir, "Payload")
-        app_dir = next((os.path.join(payload_dir, item) for item in os.listdir(payload_dir) if item.endswith(".app")), None)
-        # 驗證 Payload 和 .app 資料夾
-        if not os.path.isdir(payload_dir):
-            raise FileNotFoundError(f"未找到 Payload 資料夾：{payload_dir}")
-        if not app_dir or not os.path.isdir(app_dir):
-            raise FileNotFoundError(f"未找到 .app 資料夾：{app_dir}")
-        # 提取 Entitlements 文件
-        extract_entitlements(profile_path, entitlements_path)
-        # 替換描述文件
+        
+        extract_ipa(apple_ipa_dir, ipa_dest_path, unzip_dir)
+        app_dir = get_app_dir(unzip_dir)
+        new_bundle_id = config.bundle_id  # 假設從 config 中獲取
+        replace_bundle_id(app_dir, new_bundle_id)
         replace_provisioning_profile(unzip_dir, profile_path)
-        # 移除舊簽名並重新簽名
+        extract_entitlements(profile_path, entitlements_path)
         remove_code_signature(app_dir)
-        sign_app(app_dir, signing_identity, entitlements_path)
-        # 重新打包 IPA
-        resigned_ipa_path = repackage_ipa(unzip_dir)
-        print(f"重簽名流程完成！ 位置: {resigned_ipa_path}")
+        sign_app(app_dir, signing_identity, entitlements_path, keychain_path)
+        repackage_ipa(unzip_dir, resigned_ipa_path)
         return resigned_ipa_path
     except Exception as e:
-        print(f"重簽名失敗：{e}")
+        logging.error(f"重簽名失敗: {e}")
         raise
     finally:
         keychain.restore_default_keychain(original_keychains)
-        clean_up(unzip_dir)
-        
-def resign_single_account(account):
-    """🔄 針對單一 Apple ID 執行 IPA 重簽名"""
-    apple_id = account["apple_id"]
-    try:
-        print(f"🚀 開始重簽名 Apple ID: {apple_id}")
-        result = resign_ipa(apple_id)
-        if result:
-            print(f"✅ Apple ID {apple_id} 簽名成功：{result}")
-        else:
-            print(f"❌ Apple ID {apple_id} 簽名失敗")
-    except Exception as e:
-        print(f"❌ Apple ID {apple_id} 簽名時發生錯誤：{e}")
-        
-def batch_resign_all_accounts(max_workers=10):
-    """🚀 讀取所有 Apple 帳號，並行執行重簽名"""
-    accounts = apple_accounts.get_accounts()  # ✅ 從資料庫讀取所有帳戶
-    if not accounts:
-        print("⚠️ 沒有找到可用的 Apple 帳號")
-        return
+        clean_up(unzip_dir, ipa_dest_path)
 
-    print(f"🚀 開始批量重簽名，最大並行數: {max_workers}")
-    
-    # ✅ 使用 ThreadPoolExecutor 進行並行簽名
+def resign_single_account(account):
+    apple_id = account["apple_id"]
+    logging.info(f"開始重簽名 Apple ID: {apple_id}")
+    try:
+        result = resign_ipa(apple_id)
+        logging.info(f"Apple ID {apple_id} 簽名成功: {result}")
+        return apple_id, result
+    except Exception as e:
+        logging.error(f"Apple ID {apple_id} 簽名失敗: {e}")
+        return apple_id, None
+
+def batch_resign_all_accounts(max_workers=min(os.cpu_count() or 1, 10)):
+    accounts = apple_accounts.get_accounts()
+    logging.info(f"開始批量重簽名，最大並行數: {max_workers}")
+    results = []
     with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
-        executor.map(resign_single_account, accounts)
-        
+        future_to_account = {executor.submit(resign_single_account, acc): acc for acc in accounts}
+        for future in concurrent.futures.as_completed(future_to_account):
+            results.append(future.result())
+    with Progress() as progress:
+        task_id = progress.add_task("[green]批量重簽名", total=len(accounts))
+        for _ in results:
+            progress.update(task_id, advance=1)

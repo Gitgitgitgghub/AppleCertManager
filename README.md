@@ -73,7 +73,7 @@ JSON_PATH="${ROOT_DIR}/accounts.json"
 ```ini
 IPA_DIR_PATH="${ROOT_DIR}/ipa"
 ```
-要重簽名的ipa命名為app.ipa
+要重簽名的ipa位置
 ```ini
 IPA_PATH="${ROOT_DIR}/app.ipa"
 ```
@@ -144,9 +144,17 @@ python3 scripts/cli.py --env /Users/brant/Desktop/test1/.env import --json /User
 python3 scripts/cli.py --env /Users/brant/Desktop/test1/.env register_device test@example.com "iPhone 14" "UUID123"
 ```
 
+### 🔄 IPA 重新簽名
+
+#### 🚀 執行重新簽名
+
+```bash
+python3 scripts/cli.py --env /Users/brant/Desktop/test1/.env resign hello780831@example.com
+```
+
 ##### 📌 說明
-* 設備 **UUID** 必須是 Apple 設備的合法 UDID
-* 註冊設備後，該 Apple ID **對應的憑證將會自動重簽名 IPA**
+* 這個指令會**Apple ID 執行 IPA 重新簽名**
+* 確保 Apple ID 已經有**有效的憑證**和**描述檔**
 
 ### 🔄 批量 IPA 重新簽名
 

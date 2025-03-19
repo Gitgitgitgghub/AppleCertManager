@@ -30,7 +30,7 @@ def configure_logging():
             levelname = record.levelname
             name = record.name
             message = record.getMessage()
-            return f"{levelname}:{name}:{message}"
+            return f"{message}"
     
     handler = ColoredRichHandler(console=console, show_time=False, show_path=False, show_level=False)
     handler.setFormatter(CustomFormatter())
